@@ -313,6 +313,10 @@ export default function EditNoteScreen() {
             isEditMode={true}
           />
 
+          {images.length > 0 && (
+            <Text style={styles.maxPhotosNote}>Max. 10 photos</Text>
+          )}
+
           {/* Bouton ajouter image */}
           <View style={styles.imageButtonContainer}>
             <TouchableOpacity
@@ -470,5 +474,13 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   footerButton: {
     width: '100%',
+  },
+  maxPhotosNote: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });

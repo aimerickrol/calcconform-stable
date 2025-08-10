@@ -226,6 +226,7 @@ export function NoteImageGallery({ images, onRemoveImage, onRemoveMultipleImages
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Images ({images.length})</Text>
+        <Text style={styles.maxPhotosNote}>Max. 10 photos</Text>
         {editable && images.length > 1 && (
           <View style={styles.headerActions}>
             <TouchableOpacity onPress={handleSelectionMode} style={styles.selectionButton}>
@@ -421,6 +422,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: theme.colors.textSecondary,
+  },
+  maxPhotosNote: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: theme.colors.textTertiary,
+    fontStyle: 'italic',
   },
   headerActions: {
     flexDirection: 'row',

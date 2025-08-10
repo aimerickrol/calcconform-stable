@@ -398,6 +398,10 @@ export default function NoteDetailScreen() {
           noteId={note.id}
         />
 
+        {note?.images && note.images.length > 0 && (
+          <Text style={styles.maxPhotosNote}>Max. 10 photos</Text>
+        )}
+
         <View style={styles.contentSection}>
           <Text style={styles.contentLabel}>{strings.noteContent}</Text>
           <TextInput
@@ -713,6 +717,15 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   titleEditIcon: {
     fontSize: 12,
+  },
+  maxPhotosNote: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   inputLabel: {
     fontSize: 14,
