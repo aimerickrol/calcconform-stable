@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform, Dimensions, FlatList } from 'react-native';
 import { Trash2, X, SquareCheck as CheckSquare, Square } from 'lucide-react-native';
 import { router } from 'expo-router';

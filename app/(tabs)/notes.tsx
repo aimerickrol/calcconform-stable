@@ -173,14 +173,14 @@ function NoteItem({ item, index, onPress, onEdit, onDelete, onToggleFavorite, is
           {item.location && (
             <View style={styles.locationBadge}>
               <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">
-                Lieu : {item.location}
+                <Text>Lieu : </Text>{item.location}
               </Text>
             </View>
           )}
           {item.tags && (
             <View style={styles.tagsBadge}>
               <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">
-                Mots-clés : {item.tags}
+                <Text>Mots-clés : </Text>{item.tags}
               </Text>
             </View>
           )}
@@ -190,7 +190,7 @@ function NoteItem({ item, index, onPress, onEdit, onDelete, onToggleFavorite, is
       {item.content && (
         <View style={styles.contentPreviewContainer}>
           <Text style={styles.notePreview} numberOfLines={2}>
-            {getPreviewText(item.content)}
+            <Text>Description : </Text>{item.description}
           </Text>
         </View>
       )}
