@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { validateImageBase64 } from '@/utils/imageCompression';
 import { useModal } from '@/contexts/ModalContext';
+import { loadImageForDisplay } from '@/utils/imageStorage';
 
 interface NoteImageGalleryProps {
   images: string[];
@@ -42,10 +43,30 @@ function OptimizedImageItem({
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [displayUri, setDisplayUri] = useState(imageBase64);
   const [loadImage, setLoadImage] = useState(true); // Toujours charger les images
 
-  // Vérifier si l'image est valide
-  const isValidImage = validateImageBase64(imageBase64);
+  // Charger l'image pour l'affichage si c'est un file://
+  useEffect(() => {
+    const loadForDisplay = async () => {
+      if (imageBase64.startsWith('file://')) {
+        try {
+          const loaded = await loadImageForDisplay(imageBase64);
+          setDisplayUri(loaded);
+        } catch (error) {
+          console.error('❌ Erreur chargement image pour affichage:', error);
+          setImageError(true);
+        }
+      } else {
+        setDisplayUri(imageBase64);
+      }
+    };
+    
+    loadForDisplay();
+  }, [imageBase64]);
+
+  // Vérifier si l'image est valide (base64 ou file://)
+  const isValidImage = validateImageBase64(displayUri) || imageBase64.startsWith('file://');
 
   const styles = createStyles(theme);
 
@@ -83,7 +104,7 @@ function OptimizedImageItem({
           </View>
         ) : (
           <Image
-            source={{ uri: imageBase64 }}
+            source={{ uri: displayUri }}
             style={styles.image}
             onLoad={() => {
               console.log(`✅ Image ${index} chargée avec succès dans miniature`);
@@ -91,7 +112,7 @@ function OptimizedImageItem({
             }}
             onError={(error) => {
               console.error(`❌ Erreur chargement miniature ${index}:`, error.nativeEvent?.error);
-              console.error(`❌ URI problématique:`, imageBase64?.substring(0, 100));
+              console.error(`❌ URI problématique:`, displayUri?.substring(0, 100));
               setImageError(true);
             }}
             resizeMode="cover"

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import { Project, Building, FunctionalZone, Shutter, SearchResult, Note } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { persistImagesIfNeeded, removeImages, loadImagesForDisplay, cleanupOrphanImages, debugStorageReport } from '@/utils/imageStorage';
+import { splitStringByBytes, joinChunks } from '@/utils/chunk';
 
 // Interface pour la gestion du cache Service Worker
 interface CacheManager {
@@ -45,16 +47,19 @@ interface StorageContextType {
   createBuilding: (projectId: string, buildingData: Omit<Building, 'id' | 'projectId' | 'createdAt' | 'functionalZones'>) => Promise<Building | null>;
   updateBuilding: (buildingId: string, updates: Partial<Building>) => Promise<Building | null>;
   deleteBuilding: (buildingId: string) => Promise<boolean>;
+  deleteBuildings: (ids: string[]) => Promise<boolean>;
   
   // Actions pour les zones
   createFunctionalZone: (buildingId: string, zoneData: Omit<FunctionalZone, 'id' | 'buildingId' | 'createdAt' | 'shutters'>) => Promise<FunctionalZone | null>;
   updateFunctionalZone: (zoneId: string, updates: Partial<FunctionalZone>) => Promise<FunctionalZone | null>;
   deleteFunctionalZone: (zoneId: string) => Promise<boolean>;
+  deleteZones: (ids: string[]) => Promise<boolean>;
   
   // Actions pour les volets
   createShutter: (zoneId: string, shutterData: Omit<Shutter, 'id' | 'zoneId' | 'createdAt' | 'updatedAt'>) => Promise<Shutter | null>;
   updateShutter: (shutterId: string, updates: Partial<Shutter>) => Promise<Shutter | null>;
   deleteShutter: (shutterId: string) => Promise<boolean>;
+  deleteShuttersBatch: (ids: string[]) => Promise<boolean>;
   
   // Actions pour les favoris
   setFavoriteProjects: (favorites: string[]) => Promise<void>;
@@ -73,6 +78,7 @@ interface StorageContextType {
   createNote: (noteData: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Note>;
   updateNote: (id: string, updates: Partial<Note>) => Promise<Note | null>;
   deleteNote: (id: string) => Promise<boolean>;
+  deleteNotes: (ids: string[]) => Promise<boolean>;
   
   // Recherche
   searchShutters: (query: string) => SearchResult[];
@@ -102,6 +108,8 @@ const STORAGE_KEYS = {
   FAVORITE_NOTES: 'SIEMENS_FAV_NOTES',
   QUICK_CALC_HISTORY: 'SIEMENS_CALC_HISTORY',
   NOTES: 'SIEMENS_NOTES',
+  NOTES_TMP: 'SIEMENS_NOTES_TMP',
+  NOTES_META: 'SIEMENS_NOTES_META',
 };
 
 // Fonction utilitaire pour générer un ID unique
@@ -144,6 +152,14 @@ export function StorageProvider({ children }: StorageProviderProps) {
 
   // Ref pour maintenir la version la plus récente des projets
   const projectsRef = useRef<Project[]>([]);
+
+  // Mutex partagé pour sérialiser toutes les écritures
+  const saveQueueRef = useRef(Promise.resolve() as Promise<any>);
+  const enqueue = <T,>(fn: () => Promise<T>) => {
+    const next = saveQueueRef.current.then(fn, fn);
+    saveQueueRef.current = next.catch(() => {});
+    return next;
+  };
 
   // Mettre à jour la ref chaque fois que l'état projects change
   useEffect(() => {
@@ -359,27 +375,174 @@ export function StorageProvider({ children }: StorageProviderProps) {
   };
 
   // Fonction utilitaire pour sauvegarder les projets
-  const saveProjects = async (newProjects: Project[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(newProjects));
-      setProjects(newProjects);
-      
-      // Cache dans le Service Worker pour l'accès hors ligne
-      if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
-        try {
-          const cache = await caches.open('siemens-runtime-v2.1.0');
-          const response = new Response(JSON.stringify(newProjects), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-          await cache.put('/api/projects', response);
-          console.log('💾 Projets mis en cache Service Worker');
-        } catch (error) {
-          console.warn('⚠️ Erreur cache Service Worker:', error);
+  const saveProjects = (newProjects: Project[]) =>
+    enqueue(async () => {
+      try {
+        await AsyncStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(newProjects));
+        setProjects(newProjects);
+        
+        // Invalider le cache du service worker sur web
+        if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
+          try {
+            const registration = await navigator.serviceWorker.ready;
+            if (registration.active) {
+              registration.active.postMessage({ type: 'INVALIDATE_CACHE' });
+            }
+          } catch (swError) {
+            console.warn('Service Worker cache invalidation failed:', swError);
+          }
         }
+      } catch (error) {
+        console.error('Erreur lors de la sauvegarde des projets:', error);
+        throw error;
+      }
+    });
+
+  // Sanity check: convertir tout base64 restant en file:// sur mobile
+  const sanitizeNotesImages = async (notes: Note[]): Promise<Note[]> => {
+    if (Platform.OS === 'web') {
+      return notes; // Pas de conversion sur web
+    }
+
+    const sanitizedNotes: Note[] = [];
+    
+    for (const note of notes) {
+      if (note.images && note.images.some(img => img.startsWith('data:image/'))) {
+        console.log('🔧 Sanity check: conversion base64 → file:// pour note', note.id);
+        const persistedImages = await persistImagesIfNeeded(note.images);
+        sanitizedNotes.push({
+          ...note,
+          images: persistedImages
+        });
+      } else {
+        sanitizedNotes.push(note);
+      }
+    }
+    
+    return sanitizedNotes;
+  };
+
+  // Sauvegarde avec chunking UTF-8
+  const saveNotesWithUTF8Chunks = async (notes: Note[], dataString: string) => {
+    const maxChunkSize = 500 * 1024; // 500KB par chunk
+    const chunks = splitStringByBytes(dataString, maxChunkSize);
+    
+    console.log(`📦 Division en ${chunks.length} chunks UTF-8`);
+    
+    // Sauvegarder les métadonnées
+    const metadata = {
+      totalChunks: chunks.length,
+      timestamp: Date.now(),
+      version: '2.0'
+    };
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.NOTES_META, JSON.stringify(metadata));
+    
+    // Sauvegarder chaque chunk
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkKey = `${STORAGE_KEYS.NOTES}_chunk_${i}`;
+      await AsyncStorage.setItem(chunkKey, chunks[i]);
+    }
+    
+    // Supprimer la clé principale pour indiquer qu'on utilise les chunks
+    await AsyncStorage.removeItem(STORAGE_KEYS.NOTES);
+    
+    console.log('✅ Sauvegarde par chunks UTF-8 terminée');
+  };
+
+  // Nettoyage des anciens chunks
+  const cleanupOldChunks = async () => {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const chunkKeys = allKeys.filter(key => key.startsWith(`${STORAGE_KEYS.NOTES}_chunk_`));
+      
+      if (chunkKeys.length > 0) {
+        await AsyncStorage.multiRemove(chunkKeys);
+        await AsyncStorage.removeItem(STORAGE_KEYS.NOTES_META);
+        console.log(`🧹 ${chunkKeys.length} anciens chunks supprimés`);
       }
     } catch (error) {
-      console.error('Erreur sauvegarde projets:', error);
-      throw error;
+      console.warn('⚠️ Erreur nettoyage chunks:', error);
+    }
+  };
+
+  // Fonction utilitaire pour sauvegarder les notes
+  const saveNotes = (newNotes: Note[]) =>
+    enqueue(async () => {
+      try {
+        console.log('💾 Sauvegarde atomique de', newNotes.length, 'notes...');
+        
+        // Sanity check: s'assurer qu'aucun base64 ne reste sur mobile
+        const sanitizedNotes = await sanitizeNotesImages(newNotes);
+        
+        const dataString = JSON.stringify(sanitizedNotes);
+        const dataSizeKB = (dataString.length / 1024).toFixed(2);
+        console.log(`📊 Taille des données notes: ${dataSizeKB} KB`);
+        
+        // Write-ahead: sauvegarder temporairement
+        await AsyncStorage.setItem(STORAGE_KEYS.NOTES_TMP, dataString);
+        
+        // Si les données sont volumineuses (> 500KB), utiliser le chunking
+        if (dataString.length > 500 * 1024) {
+          console.log('📦 Chunking UTF-8 pour données volumineuses...');
+          await saveNotesWithUTF8Chunks(sanitizedNotes, dataString);
+        } else {
+          // Sauvegarde directe
+          await AsyncStorage.setItem(STORAGE_KEYS.NOTES, dataString);
+          console.log('✅ Sauvegarde directe réussie');
+        }
+        
+        // Commit: supprimer le temporaire
+        await AsyncStorage.removeItem(STORAGE_KEYS.NOTES_TMP);
+        
+        // Cleanup anciens chunks
+        await cleanupOldChunks();
+        
+        setNotes(sanitizedNotes);
+        console.log('✅ Sauvegarde atomique terminée');
+      } catch (error) {
+        console.error('❌ Erreur sauvegarde atomique notes:', error);
+        // Essayer de nettoyer le temporaire en cas d'erreur
+        try {
+          await AsyncStorage.removeItem(STORAGE_KEYS.NOTES_TMP);
+        } catch (cleanupError) {
+          console.warn('⚠️ Erreur nettoyage temporaire:', cleanupError);
+        }
+        throw error;
+      }
+    });
+
+  // Chargement depuis les chunks
+  const loadNotesFromChunks = async (): Promise<string | null> => {
+    try {
+      const metadataString = await AsyncStorage.getItem(STORAGE_KEYS.NOTES_META);
+      if (!metadataString) {
+        return null;
+      }
+      
+      const metadata = JSON.parse(metadataString);
+      console.log(`📦 Chargement depuis ${metadata.totalChunks} chunks...`);
+      
+      const chunks: string[] = [];
+      for (let i = 0; i < metadata.totalChunks; i++) {
+        const chunkKey = `${STORAGE_KEYS.NOTES}_chunk_${i}`;
+        const chunk = await AsyncStorage.getItem(chunkKey);
+        
+        if (!chunk) {
+          console.error(`❌ Chunk ${i} manquant`);
+          return null;
+        }
+        
+        chunks.push(chunk);
+      }
+      
+      const reconstructedData = joinChunks(chunks);
+      console.log('✅ Données reconstituées depuis les chunks');
+      return reconstructedData;
+      
+    } catch (error) {
+      console.error('❌ Erreur chargement chunks:', error);
+      return null;
     }
   };
 
@@ -521,6 +684,30 @@ export function StorageProvider({ children }: StorageProviderProps) {
     return found;
   };
 
+  // Suppression multiple de bâtiments (batch)
+  const deleteBuildings = async (ids: string[]): Promise<boolean> => {
+    try {
+      console.log('🗑️ Suppression batch de', ids.length, 'bâtiments');
+      
+      const newProjects = projects.map(project => ({
+        ...project,
+        buildings: project.buildings.filter(b => !ids.includes(b.id))
+      }));
+      
+      // Supprimer des favoris
+      const newFavoriteBuildings = favoriteBuildings.filter(fId => !ids.includes(fId));
+      await setFavoriteBuildings(newFavoriteBuildings);
+      
+      await saveProjects(newProjects);
+      
+      console.log('✅ Suppression batch bâtiments terminée');
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur suppression batch bâtiments:', error);
+      return false;
+    }
+  };
+
   // Actions pour les zones
   const createFunctionalZone = async (buildingId: string, zoneData: Omit<FunctionalZone, 'id' | 'buildingId' | 'createdAt' | 'shutters'>): Promise<FunctionalZone | null> => {
     const newProjects = [...projectsRef.current];
@@ -647,6 +834,33 @@ export function StorageProvider({ children }: StorageProviderProps) {
     }
     
     return found;
+  };
+
+  // Suppression multiple de zones (batch)
+  const deleteZones = async (ids: string[]): Promise<boolean> => {
+    try {
+      console.log('🗑️ Suppression batch de', ids.length, 'zones');
+      
+      const newProjects = projects.map(project => ({
+        ...project,
+        buildings: project.buildings.map(building => ({
+          ...building,
+          functionalZones: building.functionalZones.filter(z => !ids.includes(z.id))
+        }))
+      }));
+      
+      // Supprimer des favoris
+      const newFavoriteZones = favoriteZones.filter(fId => !ids.includes(fId));
+      await setFavoriteZones(newFavoriteZones);
+      
+      await saveProjects(newProjects);
+      
+      console.log('✅ Suppression batch zones terminée');
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur suppression batch zones:', error);
+      return false;
+    }
   };
 
   // Actions pour les volets
@@ -823,6 +1037,36 @@ export function StorageProvider({ children }: StorageProviderProps) {
     return found;
   };
 
+  // Suppression multiple de volets (batch)
+  const deleteShuttersBatch = async (ids: string[]): Promise<boolean> => {
+    try {
+      console.log('🗑️ Suppression batch de', ids.length, 'volets');
+      
+      const newProjects = projects.map(project => ({
+        ...project,
+        buildings: project.buildings.map(building => ({
+          ...building,
+          functionalZones: building.functionalZones.map(zone => ({
+            ...zone,
+            shutters: zone.shutters.filter(s => !ids.includes(s.id))
+          }))
+        }))
+      }));
+      
+      // Supprimer des favoris
+      const newFavoriteShutters = favoriteShutters.filter(fId => !ids.includes(fId));
+      await setFavoriteShutters(newFavoriteShutters);
+      
+      await saveProjects(newProjects);
+      
+      console.log('✅ Suppression batch volets terminée');
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur suppression batch volets:', error);
+      return false;
+    }
+  };
+
   // Actions pour les favoris
   const setFavoriteProjects = async (favorites: string[]) => {
     await safeStorageOperation(
@@ -919,34 +1163,12 @@ export function StorageProvider({ children }: StorageProviderProps) {
       contentLength: noteData.content?.length || 0
     });
     
-    // CORRECTION MAJEURE : Préserver TOUTES les images sans filtrage excessif
-    let finalImages: string[] | undefined = undefined;
-    if (noteData.images && Array.isArray(noteData.images) && noteData.images.length > 0) {
-      // Validation minimale : seulement vérifier que c'est une chaîne non vide qui commence par data:image/
-      finalImages = noteData.images.filter(img => {
-        const isValid = img && 
-          typeof img === 'string' && 
-          img.trim() !== '' && 
-          img.startsWith('data:image/');
-        
-        if (!isValid) {
-          console.warn('⚠️ Image invalide filtrée lors de la création:', img?.substring(0, 30));
-        }
-        return isValid;
-      });
-      
-      console.log(`📸 Images validées pour création: ${finalImages.length}/${noteData.images.length}`);
-      
-      // CORRECTION : Garder le tableau même s'il est vide pour éviter la perte
-      if (finalImages.length === 0) {
-        console.log('📸 Aucune image valide mais conservation du tableau vide');
-        finalImages = [];
-      }
-    }
+    // Persister les images si nécessaire
+    const persistedImages = await persistImagesIfNeeded(noteData.images);
     
     const newNote: Note = {
       ...noteData,
-      images: finalImages,
+      images: persistedImages,
       id: generateUniqueId(),
       createdAt: new Date(),
       updatedAt: new Date()
@@ -985,46 +1207,29 @@ export function StorageProvider({ children }: StorageProviderProps) {
       return null;
     }
     
-    // CORRECTION MAJEURE: Gestion explicite et claire des images
-    let finalImages = notes[noteIndex].images || []; // Toujours partir d'un tableau
+    const currentNote = notes[noteIndex];
     
-    console.log('📸 Images actuelles dans la note:', finalImages.length);
-    
-    // Si on met à jour les images explicitement
-    if (updates.hasOwnProperty('images')) {
-      console.log('📸 Mise à jour explicite des images demandée');
+    // Persister les nouvelles images si nécessaire
+    let finalImages = updates.images;
+    if (updates.images) {
+      finalImages = await persistImagesIfNeeded(updates.images);
       
-      if (updates.images === undefined || updates.images === null) {
-        // Suppression explicite
-        finalImages = [];
-        console.log('📸 Suppression explicite des images');
-      } else if (Array.isArray(updates.images)) {
-        // Remplacement ou ajout d'images
-        const validImages = updates.images.filter(img => {
-          const isValid = img && 
-            typeof img === 'string' && 
-            img.trim() !== '' && 
-            img.startsWith('data:image/');
-          
-          if (!isValid) {
-            console.warn('⚠️ Image invalide filtrée lors de la mise à jour:', img?.substring(0, 30));
-          }
-          return isValid;
-        });
-        
-        console.log(`📸 Images validées pour mise à jour: ${validImages.length}/${updates.images.length}`);
-        finalImages = validImages; // Remplacer complètement les images
-        console.log('📸 Remplacement complet des images par les nouvelles');
+      // Supprimer les anciennes images qui ne sont plus utilisées
+      if (currentNote.images) {
+        const oldImages = currentNote.images.filter(img => 
+          !finalImages?.includes(img)
+        );
+        if (oldImages.length > 0) {
+          await removeImages(oldImages);
+        }
       }
-    } else {
-      console.log('📸 Pas de mise à jour d\'images, conservation des images existantes');
     }
     
-    const updatedNote = { 
-      ...notes[noteIndex], 
-      ...updates, 
-      images: finalImages.length > 0 ? finalImages : undefined,
-      updatedAt: new Date() 
+    const updatedNote: Note = {
+      ...currentNote,
+      ...updates,
+      images: finalImages,
+      updatedAt: new Date()
     };
     
     const newNotes = [...notes];
@@ -1032,7 +1237,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
     
     try {
       await saveNotes(newNotes);
-      console.log('✅ StorageContext.updateNote - Note mise à jour avec succès, images finales:', finalImages.length);
+      console.log('✅ StorageContext.updateNote - Note mise à jour avec succès, images finales:', finalImages?.length || 0);
       return updatedNote;
     } catch (saveError) {
       console.error('❌ StorageContext.updateNote - Erreur sauvegarde:', saveError);
@@ -1041,182 +1246,72 @@ export function StorageProvider({ children }: StorageProviderProps) {
   };
 
   const deleteNote = async (id: string): Promise<boolean> => {
-    const noteIndex = notes.findIndex(n => n.id === id);
-    if (noteIndex === -1) {
+    try {
+      console.log('🗑️ Suppression note:', id);
+      
+      const noteIndex = notes.findIndex(n => n.id === id);
+      if (noteIndex === -1) {
+        console.error('❌ Note non trouvée pour suppression:', id);
+        return false;
+      }
+      
+      const noteToDelete = notes[noteIndex];
+      
+      // Supprimer les images associées
+      if (noteToDelete.images) {
+        await removeImages(noteToDelete.images);
+      }
+      
+      const newNotes = notes.filter(n => n.id !== id);
+      
+      // Supprimer des favoris
+      const newFavoriteNotes = favoriteNotes.filter(fId => fId !== id);
+      await setFavoriteNotes(newFavoriteNotes);
+      
+      await saveNotes(newNotes);
+      
+      console.log('✅ Note supprimée:', id);
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur suppression note:', error);
       return false;
     }
-    
-    const newNotes = notes.filter(n => n.id !== id);
-    await saveNotes(newNotes);
-    return true;
   };
 
-  // NOUVEAU : Fonction pour sauvegarder les notes en chunks
-  const saveNotesInChunks = async (newNotes: Note[], dataString: string) => {
+  // Suppression multiple de notes (batch)
+  const deleteNotes = async (ids: string[]): Promise<boolean> => {
     try {
-      const CHUNK_SIZE = 800 * 1024; // 800KB par chunk pour laisser de la marge
-      const chunks: string[] = [];
+      console.log('🗑️ Suppression batch de', ids.length, 'notes');
       
-      // Diviser les données en chunks
-      for (let i = 0; i < dataString.length; i += CHUNK_SIZE) {
-        chunks.push(dataString.slice(i, i + CHUNK_SIZE));
-      }
+      const notesToDelete = notes.filter(n => ids.includes(n.id));
+      const allImagesToRemove: string[] = [];
       
-      console.log(`📦 Division en ${chunks.length} chunks de ${(CHUNK_SIZE / 1024).toFixed(0)}KB chacun`);
-      
-      // Sauvegarder les métadonnées des chunks
-      const chunksMetadata = {
-        totalChunks: chunks.length,
-        totalSize: dataString.length,
-        timestamp: Date.now(),
-        notesCount: newNotes.length
-      };
-      
-      await AsyncStorage.setItem(`${STORAGE_KEYS.NOTES}_chunks_meta`, JSON.stringify(chunksMetadata));
-      
-      // Sauvegarder chaque chunk individuellement
-      const chunkPromises = chunks.map((chunk, index) => 
-        AsyncStorage.setItem(`${STORAGE_KEYS.NOTES}_chunk_${index}`, chunk)
-      );
-      
-      await Promise.all(chunkPromises);
-      
-      // Supprimer l'ancienne clé principale pour éviter les conflits
-      try {
-        await AsyncStorage.removeItem(STORAGE_KEYS.NOTES);
-      } catch (error) {
-        console.warn('⚠️ Impossible de supprimer l\'ancienne clé:', error);
-      }
-      
-      console.log('✅ Sauvegarde par chunks réussie');
-    } catch (error) {
-      console.error('❌ Erreur sauvegarde par chunks:', error);
-      throw error;
-    }
-  };
-  
-  // NOUVEAU : Fonction pour nettoyer les anciens chunks
-  const cleanupOldChunks = async () => {
-    try {
-      // Supprimer les métadonnées des chunks
-      await AsyncStorage.removeItem(`${STORAGE_KEYS.NOTES}_chunks_meta`);
-      
-      // Supprimer les chunks (essayer jusqu'à 50 chunks max)
-      const cleanupPromises = [];
-      for (let i = 0; i < 50; i++) {
-        cleanupPromises.push(
-          AsyncStorage.removeItem(`${STORAGE_KEYS.NOTES}_chunk_${i}`).catch(() => {
-            // Ignorer les erreurs pour les chunks qui n'existent pas
-          })
-        );
-      }
-      
-      await Promise.all(cleanupPromises);
-      console.log('🧹 Anciens chunks nettoyés');
-    } catch (error) {
-      console.warn('⚠️ Erreur nettoyage chunks:', error);
-    }
-  };
-
-  // NOUVEAU : Fonction pour charger les notes depuis les chunks
-  const loadNotesFromChunks = async (): Promise<Note[]> => {
-    try {
-      console.log('📦 Tentative de chargement depuis les chunks...');
-      
-      // Charger les métadonnées
-      const metadataString = await AsyncStorage.getItem(`${STORAGE_KEYS.NOTES}_chunks_meta`);
-      if (!metadataString) {
-        console.log('📦 Aucune métadonnée de chunks trouvée');
-        return [];
-      }
-      
-      const metadata = JSON.parse(metadataString);
-      console.log('📊 Métadonnées chunks:', metadata);
-      
-      // Charger tous les chunks
-      const chunkPromises = [];
-      for (let i = 0; i < metadata.totalChunks; i++) {
-        chunkPromises.push(AsyncStorage.getItem(`${STORAGE_KEYS.NOTES}_chunk_${i}`));
-      }
-      
-      const chunks = await Promise.all(chunkPromises);
-      
-      // Vérifier que tous les chunks sont présents
-      const missingChunks = chunks.filter(chunk => chunk === null);
-      if (missingChunks.length > 0) {
-        console.error('❌ Chunks manquants détectés:', missingChunks.length);
-        throw new Error(`${missingChunks.length} chunks manquants`);
-      }
-      
-      // Reconstituer les données
-      const fullDataString = chunks.join('');
-      console.log('🔗 Données reconstituées, taille:', (fullDataString.length / 1024).toFixed(2), 'KB');
-      
-      // Parser les notes
-      const parsedNotes = JSON.parse(fullDataString);
-      const processedNotes = Array.isArray(parsedNotes) ? parsedNotes.map((note: any) => ({
-        ...note,
-        createdAt: new Date(note.createdAt || Date.now()),
-        updatedAt: new Date(note.updatedAt || Date.now()),
-        images: note.images || []
-      })) : [];
-      
-      console.log('✅ Notes chargées depuis chunks:', processedNotes.length);
-      return processedNotes;
-    } catch (error) {
-      console.error('❌ Erreur chargement chunks:', error);
-      throw error;
-    }
-  };
-
-  // Fonction utilitaire pour sauvegarder les notes
-  const saveNotes = async (newNotes: Note[]) => {
-    try {
-      console.log('💾 StorageContext.saveNotes - Début sauvegarde de', newNotes.length, 'notes');
-      
-      // Calculer la taille totale des données
-      const dataString = JSON.stringify(newNotes);
-      const dataSizeKB = (dataString.length / 1024).toFixed(2);
-      console.log('📊 StorageContext.saveNotes - Taille des données:', dataSizeKB, 'KB');
-      
-      // CORRECTION MAJEURE : Système de stockage par chunks pour éviter les limites AsyncStorage
-      const dataSizeMB = parseFloat(dataSizeKB) / 1024;
-      const CHUNK_SIZE_LIMIT = 1024 * 1024; // 1MB par chunk pour être sûr
-      
-      if (dataString.length > CHUNK_SIZE_LIMIT) {
-        console.log('📦 Données trop volumineuses, utilisation du système de chunks');
-        await saveNotesInChunks(newNotes, dataString);
-      } else {
-        console.log('💾 Données de taille normale, sauvegarde directe');
-        try {
-          await AsyncStorage.setItem(STORAGE_KEYS.NOTES, dataString);
-          // Nettoyer les anciens chunks s'ils existent
-          await cleanupOldChunks();
-        } catch (error) {
-          console.warn('⚠️ Sauvegarde directe échouée, fallback vers chunks:', error);
-          await saveNotesInChunks(newNotes, dataString);
+      // Collecter toutes les images à supprimer
+      notesToDelete.forEach(note => {
+        if (note.images) {
+          allImagesToRemove.push(...note.images);
         }
+      });
+      
+      // Supprimer les images
+      if (allImagesToRemove.length > 0) {
+        await removeImages(allImagesToRemove);
       }
       
-      setNotes(newNotes);
-      console.log('✅ StorageContext.saveNotes - Sauvegarde AsyncStorage réussie');
+      // Supprimer les notes
+      const newNotes = notes.filter(n => !ids.includes(n.id));
       
-      // Cache dans le Service Worker pour l'accès hors ligne
-      if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
-        try {
-          const cache = await caches.open('siemens-runtime-v2.1.0');
-          const response = new Response(JSON.stringify(newNotes), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-          await cache.put('/api/notes', response);
-          console.log('💾 StorageContext.saveNotes - Cache Service Worker mis à jour');
-        } catch (error) {
-          console.warn('⚠️ StorageContext.saveNotes - Erreur cache Service Worker:', error);
-        }
-      }
+      // Supprimer des favoris
+      const newFavoriteNotes = favoriteNotes.filter(fId => !ids.includes(fId));
+      await setFavoriteNotes(newFavoriteNotes);
+      
+      await saveNotes(newNotes);
+      
+      console.log('✅ Suppression batch terminée');
+      return true;
     } catch (error) {
-      console.error('❌ StorageContext.saveNotes - Erreur sauvegarde:', error);
-      throw error;
+      console.error('❌ Erreur suppression batch notes:', error);
+      return false;
     }
   };
 
@@ -1254,18 +1349,43 @@ export function StorageProvider({ children }: StorageProviderProps) {
   // Utilitaires
   const clearAllData = async () => {
     try {
-      await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+      console.log('🗑️ Suppression de toutes les données...');
       
+      // Supprimer toutes les images sur mobile
+      if (Platform.OS !== 'web') {
+        const allImages = notes.flatMap(note => note.images || []);
+        await removeImages(allImages);
+      }
+      
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.PROJECTS,
+        STORAGE_KEYS.NOTES,
+        STORAGE_KEYS.NOTES_TMP,
+        STORAGE_KEYS.NOTES_META,
+        STORAGE_KEYS.FAVORITE_PROJECTS,
+        STORAGE_KEYS.FAVORITE_BUILDINGS,
+        STORAGE_KEYS.FAVORITE_ZONES,
+        STORAGE_KEYS.FAVORITE_SHUTTERS,
+        STORAGE_KEYS.FAVORITE_NOTES,
+        STORAGE_KEYS.QUICK_CALC_HISTORY
+      ]);
+      
+      // Nettoyer tous les chunks
+      await cleanupOldChunks();
+      
+      // Réinitialiser les états
       setProjects([]);
+      setNotes([]);
       setFavoriteProjectsState([]);
       setFavoriteBuildingsState([]);
       setFavoriteZonesState([]);
       setFavoriteShuttersState([]);
       setFavoriteNotesState([]);
       setQuickCalcHistoryState([]);
-      setNotes([]);
+      
+      console.log('✅ Toutes les données supprimées');
     } catch (error) {
-      console.warn('Erreur suppression données:', error);
+      console.error('❌ Erreur suppression données:', error);
       throw error;
     }
   };
@@ -1312,6 +1432,16 @@ export function StorageProvider({ children }: StorageProviderProps) {
     try {
       console.log('📥 Import du projet:', project.name, 'avec', relatedNotes.length, 'notes');
       
+      // Persister les images des notes importées
+      const notesWithPersistedImages: Note[] = [];
+      for (const note of relatedNotes) {
+        const persistedImages = await persistImagesIfNeeded(note.images);
+        notesWithPersistedImages.push({
+          ...note,
+          images: persistedImages
+        });
+      }
+      
       // Générer de nouveaux IDs pour éviter les conflits
       const newProjectId = generateUniqueId();
       const buildingIdMap = new Map<string, string>();
@@ -1356,23 +1486,12 @@ export function StorageProvider({ children }: StorageProviderProps) {
       
       // Ajouter le projet importé
       const newProjects = [...projectsRef.current, importedProject];
-      await saveProjects(newProjects);
+      const newNotes = [...notes, ...notesWithPersistedImages];
       
-      // Importer les notes liées si elles existent
-      if (relatedNotes.length > 0) {
-        console.log('📝 Import de', relatedNotes.length, 'notes liées');
-        const importedNotes = relatedNotes.map(note => ({
-          ...note,
-          id: generateUniqueId(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          // Préserver les images
-          images: note.images || []
-        }));
-        
-        const newNotes = [...notes, ...importedNotes];
-        await saveNotes(newNotes);
-      }
+      await Promise.all([
+        saveProjects(newProjects),
+        saveNotes(newNotes)
+      ]);
       
       console.log('✅ Import terminé avec succès');
       return true;
@@ -1399,12 +1518,15 @@ export function StorageProvider({ children }: StorageProviderProps) {
     createBuilding,
     updateBuilding,
     deleteBuilding,
+    deleteBuildings,
     createFunctionalZone,
     updateFunctionalZone,
     deleteFunctionalZone,
+    deleteZones,
     createShutter,
     updateShutter,
     deleteShutter,
+    deleteShuttersBatch,
     setFavoriteProjects,
     setFavoriteBuildings,
     setFavoriteZones,
@@ -1417,6 +1539,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
     createNote,
     updateNote,
     deleteNote,
+    deleteNotes,
     searchShutters,
     clearAllData,
     getStorageInfo,

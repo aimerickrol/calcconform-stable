@@ -109,7 +109,9 @@ export default function EditNoteScreen() {
       console.log('💾 Sauvegarde de la note:', note.id, 'avec', images.length, 'images');
       
       // Validation des images avant sauvegarde
-      const validImages = images.filter(img => validateImageBase64(img));
+      const validImages = images.filter(img => 
+        validateImageBase64(img) || img.startsWith('file://')
+      );
       
       console.log(`📸 Images validées pour sauvegarde: ${validImages.length}/${images.length}`);
       
@@ -120,7 +122,7 @@ export default function EditNoteScreen() {
         location: location.trim() || undefined,
         tags: tags.trim() || undefined,
         content: content.trim(),
-        images: validImages, // CORRECTION : Toujours passer le tableau
+        images: validImages.length > 0 ? validImages : undefined,
       });
 
       if (updatedNote) {

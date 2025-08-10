@@ -13,6 +13,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useModal } from '@/contexts/ModalContext';
 import { useAndroidBackButton } from '@/utils/BackHandler';
 import { compressImageFromFile, validateImageBase64, formatFileSize } from '@/utils/imageCompression';
+import { loadImagesForDisplay } from '@/utils/imageStorage';
 import { LoadingScreen } from '@/components/LoadingScreen';
 
 export default function NoteDetailScreen() {
@@ -22,6 +23,7 @@ export default function NoteDetailScreen() {
   const { notes, deleteNote, updateNote } = useStorage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [note, setNote] = useState<Note | null>(null);
+  const [displayImages, setDisplayImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingContent, setEditingContent] = useState('');
   const [textInputHeight, setTextInputHeight] = useState(200); // Hauteur initiale
@@ -37,7 +39,16 @@ export default function NoteDetailScreen() {
   const loadNote = useCallback(async () => {
     try {
       const foundNote = notes.find(n => n.id === id);
-      setNote(foundNote || null);
+      if (foundNote) {
+        setNote(foundNote);
+        
+        // Charger les images pour l'affichage
+        const imagesForDisplay = await loadImagesForDisplay(foundNote.images);
+        setDisplayImages(imagesForDisplay);
+      } else {
+        setNote(null);
+        setDisplayImages([]);
+      }
     } catch (error) {
       console.error('Erreur lors du chargement de la note:', error);
     } finally {
@@ -443,7 +454,7 @@ export default function NoteDetailScreen() {
         </View>
 
         <NoteImageGallery
-          images={note.images || []}
+          images={displayImages}
           onRemoveImage={handleRemoveImage}
           onRemoveMultipleImages={handleRemoveMultipleImages}
           editable={true}

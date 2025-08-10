@@ -103,7 +103,9 @@ export default function CreateNoteScreen() {
       }
       
       // CORRECTION: Validation plus robuste des images pour la création
-      const validImages = images.filter(img => validateImageBase64(img));
+      const validImages = images.filter(img => 
+        validateImageBase64(img) || img.startsWith('file://')
+      );
       
       console.log(`📸 Images validées pour création: ${validImages.length}/${images.length}`);
       
@@ -113,7 +115,7 @@ export default function CreateNoteScreen() {
         location: location.trim() || undefined,
         tags: tags.trim() || undefined,
         content: content.trim(),
-        images: validImages, // CORRECTION : Toujours passer le tableau, même vide
+        images: validImages.length > 0 ? validImages : undefined,
       };
       
       console.log('📋 Données de la note à créer:', {
