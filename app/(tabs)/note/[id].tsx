@@ -219,7 +219,11 @@ export default function NoteDetailScreen() {
       const currentImages = note?.images || [];
       
       if (currentImages.length + files.length > 10) {
-        Alert.alert('Limite atteinte', 'Maximum 10 images par note.');
+        Alert.alert(
+          'Limite de photos atteinte',
+          `Vous ne pouvez ajouter que ${10 - currentImages.length} photo(s) supplémentaire(s). Maximum 10 photos par note.`,
+          [{ text: 'OK' }]
+        );
         target.value = '';
         return;
       }

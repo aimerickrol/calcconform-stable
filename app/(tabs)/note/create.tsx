@@ -197,7 +197,11 @@ export default function CreateNoteScreen() {
       
       // Limite simple sur le nombre d'images
       if (images.length + files.length > 10) {
-        Alert.alert('Limite atteinte', 'Maximum 10 images par note pour éviter les problèmes de performance.');
+        Alert.alert(
+          'Limite de photos atteinte',
+          `Vous ne pouvez ajouter que ${10 - images.length} photo(s) supplémentaire(s). Maximum 10 photos par note.`,
+          [{ text: 'OK' }]
+        );
         target.value = '';
         return;
       }

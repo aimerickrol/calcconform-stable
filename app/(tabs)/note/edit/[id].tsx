@@ -183,7 +183,11 @@ export default function EditNoteScreen() {
     if (files && files.length > 0) {
       // Limite simple
       if (images.length + files.length > 10) {
-        Alert.alert('Limite atteinte', 'Maximum 10 images par note.');
+        Alert.alert(
+          'Limite de photos atteinte',
+          `Vous ne pouvez ajouter que ${10 - images.length} photo(s) supplémentaire(s). Maximum 10 photos par note.`,
+          [{ text: 'OK' }]
+        );
         target.value = '';
         return;
       }
