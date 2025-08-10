@@ -219,9 +219,10 @@ export default function NoteDetailScreen() {
       const currentImages = note?.images || [];
       
       if (currentImages.length + files.length > 10) {
+        const remainingSlots = 10 - currentImages.length;
         Alert.alert(
           'Limite de photos atteinte',
-          `Vous ne pouvez ajouter que ${10 - currentImages.length} photo(s) supplémentaire(s). Maximum 10 photos par note.`,
+          `Vous ne pouvez ajouter que ${remainingSlots} photo(s) supplémentaire(s). Maximum 10 photos par note.`,
           [{ text: 'OK' }]
         );
         target.value = '';
