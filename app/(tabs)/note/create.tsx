@@ -128,13 +128,12 @@ export default function CreateNoteScreen() {
 
       if (note) {
         console.log('✅ Note créée avec succès:', note.id);
-        console.log('✅ Images dans la note créée:', note.images?.length || 0);
         
         // Marquer qu'il faut réinitialiser le formulaire au prochain focus
         setShouldReset(true);
         safeNavigate(`/(tabs)/note/${note.id}`);
       } else {
-        console.error('❌ createNote a retourné null - problème dans StorageContext');
+        console.error('❌ createNote a retourné null');
         Alert.alert('Erreur', 'Impossible de créer la note. Veuillez réessayer.');
         setShouldReset(true);
         safeNavigate('/(tabs)/notes');

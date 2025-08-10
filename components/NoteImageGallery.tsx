@@ -46,33 +46,16 @@ function OptimizedImageItem({
   const [displayUri, setDisplayUri] = useState(imageBase64);
   const [loadImage, setLoadImage] = useState(true); // Toujours charger les images
 
-  // Charger l'image pour l'affichage si c'est un file://
+  // Utiliser directement l'URI pour éviter les problèmes de chargement
   useEffect(() => {
-    if (Platform.OS !== 'web') {
-      const loadForDisplay = async () => {
-        if (imageBase64.startsWith('file://')) {
-          try {
-            const loaded = await loadImageForDisplay(imageBase64);
-            setDisplayUri(loaded);
-          } catch (error) {
-            console.error('❌ Erreur chargement image pour affichage:', error);
-            setImageError(true);
-          }
-        } else {
-          setDisplayUri(imageBase64);
-        }
-      };
-      
-      loadForDisplay();
-    } else {
-      // Sur web, utiliser directement l'URI
-      setDisplayUri(imageBase64);
-    }
-    
+    setDisplayUri(imageBase64);
   }, [imageBase64]);
 
   // Vérifier si l'image est valide (base64 ou file://)
-  const isValidImage = validateImageBase64(displayUri) || imageBase64.startsWith('file://');
+  const isValidImage = imageBase64 && (
+    imageBase64.startsWith('data:image/') || 
+    imageBase64.startsWith('file://')
+  );
 
   const styles = createStyles(theme);
 

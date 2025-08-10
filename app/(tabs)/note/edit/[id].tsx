@@ -129,7 +129,7 @@ export default function EditNoteScreen() {
         console.log('✅ Note mise à jour avec succès');
         safeNavigate(`/(tabs)/note/${note.id}`);
       } else {
-        console.error('❌ Erreur: Note non trouvée pour la mise à jour');
+        console.error('❌ updateNote a retourné null');
         Alert.alert('Erreur', 'Impossible de sauvegarder la note. Veuillez réessayer.');
         safeNavigate(`/(tabs)/note/${note.id}`);
       }
