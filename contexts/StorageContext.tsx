@@ -1192,12 +1192,12 @@ export function StorageProvider({ children }: StorageProviderProps) {
     // CORRECTION: Sauvegarde sécurisée
     try {
       await saveNotes(newNotes);
+      console.log('✅ StorageContext.createNote - Note sauvegardée avec succès');
+      return newNote;
     } catch (saveError) {
-      console.error('BUG Erreur sauvegarde notes:', saveError);
+      console.error('❌ Erreur sauvegarde note:', saveError);
+      throw new Error('Impossible de sauvegarder la note');
     }
-    
-    console.log('✅ StorageContext.createNote - Note sauvegardée avec succès');
-    return newNote;
   };
 
   const updateNote = async (id: string, updates: Partial<Note>): Promise<Note | null> => {
