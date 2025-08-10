@@ -1051,6 +1051,124 @@ export function StorageProvider({ children }: StorageProviderProps) {
     return true;
   };
 
+  // NOUVEAU : Fonction pour sauvegarder les notes en chunks
+  const saveNotesInChunks = async (newNotes: Note[], dataString: string) => {
+    try {
+      const CHUNK_SIZE = 800 * 1024; // 800KB par chunk pour laisser de la marge
+      const chunks: string[] = [];
+      
+      // Diviser les données en chunks
+      for (let i = 0; i < dataString.length; i += CHUNK_SIZE) {
+        chunks.push(dataString.slice(i, i + CHUNK_SIZE));
+      }
+      
+      console.log(`📦 Division en ${chunks.length} chunks de ${(CHUNK_SIZE / 1024).toFixed(0)}KB chacun`);
+      
+      // Sauvegarder les métadonnées des chunks
+      const chunksMetadata = {
+        totalChunks: chunks.length,
+        totalSize: dataString.length,
+        timestamp: Date.now(),
+        notesCount: newNotes.length
+      };
+      
+      await AsyncStorage.setItem(`${STORAGE_KEYS.NOTES}_chunks_meta`, JSON.stringify(chunksMetadata));
+      
+      // Sauvegarder chaque chunk individuellement
+      const chunkPromises = chunks.map((chunk, index) => 
+        AsyncStorage.setItem(`${STORAGE_KEYS.NOTES}_chunk_${index}`, chunk)
+      );
+      
+      await Promise.all(chunkPromises);
+      
+      // Supprimer l'ancienne clé principale pour éviter les conflits
+      try {
+        await AsyncStorage.removeItem(STORAGE_KEYS.NOTES);
+      } catch (error) {
+        console.warn('⚠️ Impossible de supprimer l\'ancienne clé:', error);
+      }
+      
+      console.log('✅ Sauvegarde par chunks réussie');
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde par chunks:', error);
+      throw error;
+    }
+  };
+  
+  // NOUVEAU : Fonction pour nettoyer les anciens chunks
+  const cleanupOldChunks = async () => {
+    try {
+      // Supprimer les métadonnées des chunks
+      await AsyncStorage.removeItem(`${STORAGE_KEYS.NOTES}_chunks_meta`);
+      
+      // Supprimer les chunks (essayer jusqu'à 50 chunks max)
+      const cleanupPromises = [];
+      for (let i = 0; i < 50; i++) {
+        cleanupPromises.push(
+          AsyncStorage.removeItem(`${STORAGE_KEYS.NOTES}_chunk_${i}`).catch(() => {
+            // Ignorer les erreurs pour les chunks qui n'existent pas
+          })
+        );
+      }
+      
+      await Promise.all(cleanupPromises);
+      console.log('🧹 Anciens chunks nettoyés');
+    } catch (error) {
+      console.warn('⚠️ Erreur nettoyage chunks:', error);
+    }
+  };
+
+  // NOUVEAU : Fonction pour charger les notes depuis les chunks
+  const loadNotesFromChunks = async (): Promise<Note[]> => {
+    try {
+      console.log('📦 Tentative de chargement depuis les chunks...');
+      
+      // Charger les métadonnées
+      const metadataString = await AsyncStorage.getItem(`${STORAGE_KEYS.NOTES}_chunks_meta`);
+      if (!metadataString) {
+        console.log('📦 Aucune métadonnée de chunks trouvée');
+        return [];
+      }
+      
+      const metadata = JSON.parse(metadataString);
+      console.log('📊 Métadonnées chunks:', metadata);
+      
+      // Charger tous les chunks
+      const chunkPromises = [];
+      for (let i = 0; i < metadata.totalChunks; i++) {
+        chunkPromises.push(AsyncStorage.getItem(`${STORAGE_KEYS.NOTES}_chunk_${i}`));
+      }
+      
+      const chunks = await Promise.all(chunkPromises);
+      
+      // Vérifier que tous les chunks sont présents
+      const missingChunks = chunks.filter(chunk => chunk === null);
+      if (missingChunks.length > 0) {
+        console.error('❌ Chunks manquants détectés:', missingChunks.length);
+        throw new Error(`${missingChunks.length} chunks manquants`);
+      }
+      
+      // Reconstituer les données
+      const fullDataString = chunks.join('');
+      console.log('🔗 Données reconstituées, taille:', (fullDataString.length / 1024).toFixed(2), 'KB');
+      
+      // Parser les notes
+      const parsedNotes = JSON.parse(fullDataString);
+      const processedNotes = Array.isArray(parsedNotes) ? parsedNotes.map((note: any) => ({
+        ...note,
+        createdAt: new Date(note.createdAt || Date.now()),
+        updatedAt: new Date(note.updatedAt || Date.now()),
+        images: note.images || []
+      })) : [];
+      
+      console.log('✅ Notes chargées depuis chunks:', processedNotes.length);
+      return processedNotes;
+    } catch (error) {
+      console.error('❌ Erreur chargement chunks:', error);
+      throw error;
+    }
+  };
+
   // Fonction utilitaire pour sauvegarder les notes
   const saveNotes = async (newNotes: Note[]) => {
     try {
@@ -1061,8 +1179,25 @@ export function StorageProvider({ children }: StorageProviderProps) {
       const dataSizeKB = (dataString.length / 1024).toFixed(2);
       console.log('📊 StorageContext.saveNotes - Taille des données:', dataSizeKB, 'KB');
       
-      // Sauvegarder avec gestion d'erreur robuste
-      await AsyncStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(newNotes));
+      // CORRECTION MAJEURE : Système de stockage par chunks pour éviter les limites AsyncStorage
+      const dataSizeMB = parseFloat(dataSizeKB) / 1024;
+      const CHUNK_SIZE_LIMIT = 1024 * 1024; // 1MB par chunk pour être sûr
+      
+      if (dataString.length > CHUNK_SIZE_LIMIT) {
+        console.log('📦 Données trop volumineuses, utilisation du système de chunks');
+        await saveNotesInChunks(newNotes, dataString);
+      } else {
+        console.log('💾 Données de taille normale, sauvegarde directe');
+        try {
+          await AsyncStorage.setItem(STORAGE_KEYS.NOTES, dataString);
+          // Nettoyer les anciens chunks s'ils existent
+          await cleanupOldChunks();
+        } catch (error) {
+          console.warn('⚠️ Sauvegarde directe échouée, fallback vers chunks:', error);
+          await saveNotesInChunks(newNotes, dataString);
+        }
+      }
+      
       setNotes(newNotes);
       console.log('✅ StorageContext.saveNotes - Sauvegarde AsyncStorage réussie');
       
