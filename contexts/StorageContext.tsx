@@ -106,7 +106,7 @@ async function compressImages(images?: string[]): Promise<string[] | undefined> 
     return undefined;
   }
 
-  console.log('📸 Compression de', images.length, 'images...');
+  console.log('📸 Traitement de', images.length, 'images (sans limite globale)...');
   const compressedImages: string[] = [];
 
   for (let i = 0; i < images.length; i++) {
@@ -150,7 +150,7 @@ async function compressImages(images?: string[]): Promise<string[] | undefined> 
     }
   }
 
-  console.log(`✅ Compression terminée: ${compressedImages.length}/${images.length} images traitées`);
+  console.log(`✅ Traitement terminé: ${compressedImages.length}/${images.length} images traitées (stockage illimité)`);
   return compressedImages;
 }
 
@@ -553,7 +553,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
   // Notes avec compression automatique
   const createNote = async (noteData: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>): Promise<Note | null> => {
     try {
-      console.log('📝 Création note avec', noteData.images?.length || 0, 'images');
+      console.log('📝 Création note avec', noteData.images?.length || 0, 'images (stockage illimité)');
       
       // Compression automatique des images
       const compressedImages = await compressImages(noteData.images);
@@ -569,7 +569,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
       notes.push(note);
       await saveNotes();
       
-      console.log('✅ Note créée avec succès:', note.id);
+      console.log('✅ Note créée avec succès:', note.id, 'avec', compressedImages?.length || 0, 'images stockées');
       return note;
     } catch (error) {
       console.error('❌ Erreur création note:', error);
@@ -585,11 +585,13 @@ export function StorageProvider({ children }: StorageProviderProps) {
       // Compression automatique des nouvelles images
       let finalUpdates = { ...updates };
       if (updates.images) {
+        console.log('📝 Mise à jour note avec', updates.images.length, 'images (stockage illimité)');
         finalUpdates.images = await compressImages(updates.images);
       }
       
       notes[index] = { ...notes[index], ...finalUpdates, updatedAt: new Date() };
       await saveNotes();
+      console.log('✅ Note mise à jour avec succès:', id, 'avec', finalUpdates.images?.length || 0, 'images stockées');
       return notes[index];
     } catch (error) {
       console.error('❌ Erreur mise à jour note:', error);

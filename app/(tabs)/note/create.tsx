@@ -201,10 +201,13 @@ export default function CreateNoteScreen() {
         const processedImages: string[] = [];
         const filesToProcess = Math.min(files.length, remainingSlots);
         
+        console.log(`📸 Traitement de ${filesToProcess} images sur ${files.length} sélectionnées`);
+        
         for (let i = 0; i < filesToProcess; i++) {
           const file = files[i];
           
           if (!file || !file.type.startsWith('image/')) {
+            console.warn(`⚠️ Fichier ${i} ignoré: pas une image valide`);
             continue;
           }
           
@@ -217,14 +220,16 @@ export default function CreateNoteScreen() {
             
             if (compressedImage && validateImageBase64(compressedImage)) {
               processedImages.push(compressedImage);
+              console.log(`✅ Image ${i} traitée et ajoutée`);
             }
           } catch (error) {
-            console.warn(`Erreur traitement image ${i}:`, error);
+            console.warn(`❌ Erreur traitement image ${i}:`, error);
           }
         }
         
         if (processedImages.length > 0) {
           setImages(prev => [...prev, ...processedImages]);
+          console.log(`✅ ${processedImages.length} images ajoutées au formulaire`);
         }
         
       } catch (error) {
