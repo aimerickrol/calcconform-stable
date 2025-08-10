@@ -501,26 +501,26 @@ export default function ZoneDetailScreen() {
     const compliance = calculateCompliance(currentRefFlow, currentMeasFlow);
 
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.shutterCard,
           isSelected && styles.selectedCard,
           isFavorite && styles.favoriteCard
         ]}
-        onPress={() => handleShutterPress(item)}
-        onLongPress={() => {
-          if (!selectionMode) {
-            setSelectionMode(true);
-            handleShutterSelection(item.id);
-          }
-        }}
       >
         <View style={styles.shutterHeader}>
           <View style={styles.shutterTitleSection}>
             {selectionMode && (
               <TouchableOpacity 
                 style={styles.checkbox}
-                onPress={() => handleShutterSelection(item.id)}
+                onPress={() => {
+                  if (selectionMode) {
+                    handleShutterSelection(item.id);
+                  } else {
+                    setSelectionMode(true);
+                    handleShutterSelection(item.id);
+                  }
+                }}
               >
                 {isSelected ? (
                   <CheckSquare size={18} color={theme.colors.primary} />
@@ -533,6 +533,12 @@ export default function ZoneDetailScreen() {
               style={[styles.shutterNameContainer, selectionMode && styles.shutterNameContainerSelection]}
               onPress={() => !selectionMode && openNameEditModal(item)}
               disabled={selectionMode}
+              onLongPress={() => {
+                if (!selectionMode) {
+                  setSelectionMode(true);
+                  handleShutterSelection(item.id);
+                }
+              }}
             >
               <Text style={styles.shutterName} numberOfLines={1} ellipsizeMode="tail">
                 {item.name}
@@ -579,7 +585,6 @@ export default function ZoneDetailScreen() {
         <TouchableOpacity 
           style={styles.flowEditingContainer}
           activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
         >
           <Text style={styles.flowSectionTitle}>Mesures de débit</Text>
           <View style={styles.flowEditingRow}>
@@ -599,7 +604,6 @@ export default function ZoneDetailScreen() {
                 placeholder="Ex: 5000"
                 placeholderTextColor={theme.colors.textTertiary}
                 selectTextOnFocus={true}
-                onPressIn={(e) => e.stopPropagation()}
               />
             </View>
             
@@ -618,7 +622,6 @@ export default function ZoneDetailScreen() {
                 placeholder="Ex: 4800"
                 placeholderTextColor={theme.colors.textTertiary}
                 selectTextOnFocus={true}
-                onPressIn={(e) => e.stopPropagation()}
               />
             </View>
             
@@ -639,7 +642,6 @@ export default function ZoneDetailScreen() {
         <TouchableOpacity 
           style={styles.remarksEditingContainer}
           activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
         >
           <TextInput
             style={styles.remarksEditingInput}
@@ -650,25 +652,24 @@ export default function ZoneDetailScreen() {
             placeholderTextColor={theme.colors.textTertiary}
             multiline={false}
             textAlignVertical="top"
-            onPressIn={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-            }}
-            onFocus={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-            }}
-            onTouchStart={(e) => {
-              e.stopPropagation();
-            }}
           />
         </TouchableOpacity>
+
+        {/* Bouton pour accéder aux détails du volet */}
+        <View style={styles.detailButtonContainer}>
+          <TouchableOpacity
+            style={styles.detailButton}
+            onPress={() => router.push(`/(tabs)/shutter/${item.id}`)}
+          >
+            <Text style={styles.detailButtonText}>Voir détails</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.complianceSection}>
           <ComplianceIndicator compliance={compliance} size="small" />
         </View>
 
-        </TouchableOpacity>
+        </View>
     );
   };
 
@@ -1453,6 +1454,27 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: 6,
     padding: 4,
     marginBottom: 12,
+  },
+  detailButtonContainer: {
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  detailButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  detailButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   modalContent: {
     backgroundColor: theme.colors.surface,
