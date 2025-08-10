@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, Platform, Animated, ScrollView } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Plus, Settings, Wind, Star, Trash2, SquareCheck as CheckSquare, Square, X, Filter } from 'lucide-react-native';
 import { Header } from '@/components/Header';
