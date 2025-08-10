@@ -16,7 +16,6 @@ export default function CreateNoteScreen() {
   const { strings } = useLanguage();
   const { theme } = useTheme();
   const { createNote, notes } = useStorage();
-  const { preserveData } = useLocalSearchParams<{ preserveData?: string }>();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -26,27 +25,23 @@ export default function CreateNoteScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ content?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [shouldReset, setShouldReset] = useState(true);
 
-  // Réinitialiser le formulaire au focus de la page
+  // Réinitialiser le formulaire à chaque fois qu'on arrive sur la page
   useFocusEffect(
     useCallback(() => {
-      console.log('📝 Page de création de note focalisée - shouldReset:', shouldReset);
+      console.log('📝 Page de création de note focalisée - réinitialisation du formulaire');
       
-      // Réinitialiser le formulaire si nécessaire
-      if (shouldReset) {
-        console.log('🔄 Réinitialisation du formulaire');
-        setTitle('');
-        setDescription('');
-        setLocation('');
-        setTags('');
-        setContent('');
-        setImages([]);
-        setErrors({});
-        setLoading(false);
-        setShouldReset(false);
-      }
-    }, [shouldReset])
+      // Toujours réinitialiser le formulaire
+      console.log('🔄 Réinitialisation du formulaire');
+      setTitle('');
+      setDescription('');
+      setLocation('');
+      setTags('');
+      setContent('');
+      setImages([]);
+      setErrors({});
+      setLoading(false);
+    }, [])
   );
 
   const handleBack = () => {
@@ -129,19 +124,15 @@ export default function CreateNoteScreen() {
       if (note) {
         console.log('✅ Note créée avec succès:', note.id);
         
-        // Marquer qu'il faut réinitialiser le formulaire au prochain focus
-        setShouldReset(true);
         safeNavigate(`/(tabs)/note/${note.id}`);
       } else {
         console.error('❌ createNote a retourné null');
         Alert.alert('Erreur', 'Impossible de créer la note. Veuillez réessayer.');
-        setShouldReset(true);
         safeNavigate('/(tabs)/notes');
       }
     } catch (error) {
       console.error('❌ Erreur lors de la création de la note:', error);
       Alert.alert('Erreur', 'Impossible de créer la note. Veuillez réessayer.');
-      setShouldReset(true);
       safeNavigate('/(tabs)/notes');
     } finally {
       setLoading(false);
