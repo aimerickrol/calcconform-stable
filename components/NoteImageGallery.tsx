@@ -5,7 +5,6 @@ import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { validateImageBase64 } from '@/utils/imageCompression';
 import { useModal } from '@/contexts/ModalContext';
-import { loadImageForDisplay } from '@/utils/imageStorage';
 
 interface NoteImageGalleryProps {
   images: string[];
@@ -43,19 +42,8 @@ function OptimizedImageItem({
 }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [displayUri, setDisplayUri] = useState(imageBase64);
-  const [loadImage, setLoadImage] = useState(true); // Toujours charger les images
 
-  // Utiliser directement l'URI pour éviter les problèmes de chargement
-  useEffect(() => {
-    setDisplayUri(imageBase64);
-  }, [imageBase64]);
-
-  // Vérifier si l'image est valide (base64 ou file://)
-  const isValidImage = imageBase64 && (
-    imageBase64.startsWith('data:image/') || 
-    imageBase64.startsWith('file://')
-  );
+  const isValidImage = validateImageBase64(imageBase64);
 
   const styles = createStyles(theme);
 
@@ -93,15 +81,12 @@ function OptimizedImageItem({
           </View>
         ) : (
           <Image
-            source={{ uri: displayUri }}
+            source={{ uri: imageBase64 }}
             style={styles.image}
             onLoad={() => {
-              console.log(`✅ Image ${index} chargée avec succès dans miniature`);
               setImageLoaded(true);
             }}
             onError={(error) => {
-              console.error(`❌ Erreur chargement miniature ${index}:`, error.nativeEvent?.error);
-              console.error(`❌ URI problématique:`, displayUri?.substring(0, 100));
               setImageError(true);
             }}
             resizeMode="cover"
@@ -200,17 +185,11 @@ export function NoteImageGallery({ images, onRemoveImage, onRemoveMultipleImages
     }
     
     try {
-      console.log('🖼️ Ouverture image - noteId:', noteId, 'editable:', editable, 'isEditMode:', isEditMode);
-      
-      // CORRECTION: Vérifier que l'image est valide avant d'ouvrir le visualiseur
       const imageToView = images[index];
       if (!validateImageBase64(imageToView)) {
-        console.error('❌ Image invalide pour le visualiseur:', imageToView?.substring(0, 30));
-        Alert.alert('Erreur', 'Cette image ne peut pas être affichée.');
         return;
       }
       
-      // Encoder toutes les images pour les passer en paramètre
       const validImages = images.filter(img => validateImageBase64(img));
       const allImagesParam = encodeURIComponent(JSON.stringify(validImages));
       
@@ -223,14 +202,10 @@ export function NoteImageGallery({ images, onRemoveImage, onRemoveMultipleImages
       
       if (noteId) {
         params.noteId = noteId;
-        // Si on est en mode édition, retourner vers l'édition, sinon vers le détail
         params.returnTo = isEditMode ? 'edit' : 'detail';
       } else {
-        // Si pas de noteId, on est en création
         params.returnTo = 'create';
       }
-      
-      console.log('📱 Navigation vers visualiseur avec params:', params);
       
       router.push({
         pathname: '/(tabs)/image-viewer',
@@ -238,7 +213,6 @@ export function NoteImageGallery({ images, onRemoveImage, onRemoveMultipleImages
       });
     } catch (error) {
       console.error('Erreur navigation vers visualiseur:', error);
-      Alert.alert('Erreur', 'Impossible d\'ouvrir le visualiseur d\'images.');
     }
   };
 
