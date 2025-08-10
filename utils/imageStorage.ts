@@ -16,9 +16,21 @@ export async function persistImagesIfNeeded(images?: string[]): Promise<string[]
     return undefined;
   }
 
-  // Sur web, retourner les images inchangées
+  // CORRECTION: Sur web, retourner TOUJOURS les images inchangées
   if (Platform.OS === 'web') {
     console.log('🌐 Web: conservation des images base64');
+    return images;
+  }
+
+  // CORRECTION: Fallback sécurisé - si expo-file-system n'est pas disponible, garder base64
+  try {
+    const FileSystem = require('expo-file-system');
+    if (!FileSystem) {
+      console.log('📱 FileSystem non disponible, conservation base64');
+      return images;
+    }
+  } catch (error) {
+    console.log('📱 Erreur import FileSystem, conservation base64:', error);
     return images;
   }
 

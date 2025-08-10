@@ -712,8 +712,14 @@ export function StorageProvider({ children }: StorageProviderProps) {
   const createFunctionalZone = async (buildingId: string, zoneData: Omit<FunctionalZone, 'id' | 'buildingId' | 'createdAt' | 'shutters'>): Promise<FunctionalZone | null> => {
     const newProjects = [...projectsRef.current];
     
-    for (let i = 0; i < newProjects.length; i++) {
-      const buildingIndex = newProjects[i].buildings.findIndex(b => b.id === buildingId);
+        // CORRECTION: Persistance sécurisée avec fallback
+        let persistedImages: string[] | undefined;
+        try {
+          persistedImages = await persistImagesIfNeeded(noteData.images);
+        } catch (error) {
+          console.warn('⚠️ Erreur persistance images, conservation base64:', error);
+          persistedImages = noteData.images; // Fallback vers base64
+        }
       if (buildingIndex !== -1) {
         const newZone: FunctionalZone = {
           ...zoneData,
@@ -725,7 +731,14 @@ export function StorageProvider({ children }: StorageProviderProps) {
         
         newProjects[i] = {
           ...newProjects[i],
-          buildings: [
+        
+        // CORRECTION: Sauvegarde sécurisée
+        try {
+          await saveNotes(newNotes);
+        } catch (saveError) {
+          console.error('❌ Erreur sauvegarde note:', saveError);
+          throw new Error('Impossible de sauvegarder la note');
+        }
             ...newProjects[i].buildings.slice(0, buildingIndex),
             {
               ...newProjects[i].buildings[buildingIndex],
@@ -1224,7 +1237,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
         console.log('💾 Images mises à jour persistées:', finalImages?.length || 0);
       } catch (error) {
         console.error('❌ Erreur persistance images mise à jour:', error);
-        finalImages = undefined;
+        return null; // CORRECTION: Retourner null au lieu de throw
       }
       
       // Supprimer les anciennes images qui ne sont plus utilisées
