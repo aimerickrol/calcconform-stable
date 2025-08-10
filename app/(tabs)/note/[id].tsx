@@ -398,10 +398,6 @@ export default function NoteDetailScreen() {
           noteId={note.id}
         />
 
-        {note?.images && note.images.length > 0 && (
-          <Text style={styles.maxPhotosNote}>Max. 10 photos</Text>
-        )}
-
         <View style={styles.contentSection}>
           <Text style={styles.contentLabel}>{strings.noteContent}</Text>
           <TextInput

@@ -292,10 +292,6 @@ export default function CreateNoteScreen() {
             disableViewer={true}
           />
 
-          {images.length > 0 && (
-            <Text style={styles.maxPhotosNote}>Max. 10 photos</Text>
-          )}
-
           <View style={styles.imageButtonContainer}>
             <TouchableOpacity
               style={styles.addPhotoButton}

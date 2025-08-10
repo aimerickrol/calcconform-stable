@@ -313,10 +313,6 @@ export default function EditNoteScreen() {
             isEditMode={true}
           />
 
-          {images.length > 0 && (
-            <Text style={styles.maxPhotosNote}>Max. 10 photos</Text>
-          )}
-
           {/* Bouton ajouter image */}
           <View style={styles.imageButtonContainer}>
             <TouchableOpacity
