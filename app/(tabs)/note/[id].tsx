@@ -221,18 +221,26 @@ export default function NoteDetailScreen() {
       
       // Vérifier si on dépasse la limite
       if (currentImages.length + files.length > 10) {
+        const filesToAdd = Math.min(files.length, remainingSlots);
         Alert.alert(
           'Limite de photos atteinte',
-          `Seules les ${remainingSlots} première(s) photo(s) seront ajoutées. Maximum 10 photos par note.`,
+          `Seules les ${filesToAdd} première(s) photo(s) seront ajoutées. Maximum 10 photos par note.`,
           [{ text: 'OK' }]
         );
       }
       
       try {
         const processedImages: string[] = [];
-        const filesToProcess = Math.min(files.length, remainingSlots);
+        const filesToProcess = remainingSlots > 0 ? Math.min(files.length, remainingSlots) : 0;
         
         console.log(`📸 Traitement de ${filesToProcess} images sur ${files.length} sélectionnées`);
+        
+        // Si aucun slot disponible, arrêter ici
+        if (filesToProcess === 0) {
+          console.log('⚠️ Aucun slot disponible pour ajouter des images');
+          target.value = '';
+          return;
+        }
         
         for (let i = 0; i < filesToProcess; i++) {
           const file = files[i];

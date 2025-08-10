@@ -100,47 +100,52 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
-    paddingTop: 44,
+    paddingTop: Platform.select({
+      ios: 20, // Réduire pour iOS
+      android: 10, // Réduire pour Android
+      web: 10, // Réduire pour web
+      default: 20
+    }),
   },
   containerWeb: {
     paddingTop: Platform.select({
-      web: 20, // Réduire le padding top sur web
-      default: 44
+      web: 5, // Encore plus réduit sur web
+      default: 10
     }),
   },
   topBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12, // Réduire le padding horizontal
+    paddingVertical: 4, // Réduire le padding vertical
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.separator,
   },
   topBarWeb: {
-    paddingVertical: 4, // Réduire le padding vertical sur web
+    paddingVertical: 2, // Encore plus réduit sur web
   },
   topBarContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    minHeight: 40,
+    minHeight: 28, // Réduire la hauteur minimale
   },
   logoSection: {
     alignItems: 'center',
   },
   logo: {
-    height: 36,
-    width: 119,
+    height: 24, // Logo plus petit
+    width: 79,
   },
   logoWeb: {
-    height: 24, // Logo plus petit sur web
-    width: 79,
+    height: 20, // Encore plus petit sur web
+    width: 66,
   },
   settingsButton: {
     position: 'absolute',
     right: 0,
     top: '50%',
-    transform: [{ translateY: -11 }],
-    padding: 6,
+    transform: [{ translateY: -8 }], // Ajuster la position
+    padding: 4, // Réduire le padding
     borderRadius: 6,
     backgroundColor: theme.colors.surfaceSecondary,
   },
@@ -148,23 +153,23 @@ const createStyles = (theme: any) => StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: '50%',
-    transform: [{ translateY: -11 }],
+    transform: [{ translateY: -8 }], // Ajuster la position
     flexDirection: 'row',
-    gap: 8,
+    gap: 4, // Réduire l'espacement
   },
   topBarButton: {
-    padding: 6,
+    padding: 4, // Réduire le padding des boutons
     borderRadius: 6,
   },
   mainHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12, // Réduire le padding horizontal
+    paddingVertical: 8, // Réduire significativement le padding vertical
   },
   mainHeaderWeb: {
-    paddingVertical: 8, // Réduire le padding vertical sur web
+    paddingVertical: 4, // Encore plus réduit sur web
   },
   left: {
     flexDirection: 'row',
@@ -172,24 +177,24 @@ const createStyles = (theme: any) => StyleSheet.create({
     flex: 1,
   },
   right: {
-    marginLeft: 16,
+    marginLeft: 8, // Réduire la marge
   },
   backButton: {
-    marginRight: 12,
+    marginRight: 8, // Réduire la marge
     padding: 4,
   },
   titleContainer: {
     flex: 1,
   },
   pageTitle: {
-    fontSize: 26,
+    fontSize: 22, // Réduire la taille du titre
     fontFamily: 'Inter-Bold',
     color: theme.colors.text,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 13, // Réduire la taille du sous-titre
     fontFamily: 'Inter-Regular',
     color: theme.colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1, // Réduire l'espacement
   },
 });
