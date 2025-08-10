@@ -186,22 +186,22 @@ export default function CreateNoteScreen() {
     if (files && files.length > 0) {
       console.log('📸 Traitement de', files.length, 'images...');
       
-      // Limite simple sur le nombre d'images
+      const remainingSlots = 10 - images.length;
+      
+      // Vérifier si on dépasse la limite
       if (images.length + files.length > 10) {
-        const remainingSlots = 10 - images.length;
         Alert.alert(
           'Limite de photos atteinte',
-          `Vous ne pouvez ajouter que ${remainingSlots} photo(s) supplémentaire(s). Maximum 10 photos par note.`,
+          `Seules les ${remainingSlots} première(s) photo(s) seront ajoutées. Maximum 10 photos par note.`,
           [{ text: 'OK' }]
         );
-        target.value = '';
-        return;
       }
       
       try {
         const processedImages: string[] = [];
+        const filesToProcess = Math.min(files.length, remainingSlots);
         
-        for (let i = 0; i < files.length; i++) {
+        for (let i = 0; i < filesToProcess; i++) {
           const file = files[i];
           
           if (!file || !file.type.startsWith('image/')) {
