@@ -13,7 +13,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useModal } from '@/contexts/ModalContext';
 import { useAndroidBackButton } from '@/utils/BackHandler';
 import { compressImageFromFile, validateImageBase64, formatFileSize } from '@/utils/imageCompression';
-import { loadImagesForDisplay } from '@/utils/imageStorage';
 import { LoadingScreen } from '@/components/LoadingScreen';
 
 export default function NoteDetailScreen() {
@@ -23,7 +22,6 @@ export default function NoteDetailScreen() {
   const { notes, deleteNote, updateNote } = useStorage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [note, setNote] = useState<Note | null>(null);
-  const [displayImages, setDisplayImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingContent, setEditingContent] = useState('');
   const [textInputHeight, setTextInputHeight] = useState(200); // Hauteur initiale
@@ -41,13 +39,8 @@ export default function NoteDetailScreen() {
       const foundNote = notes.find(n => n.id === id);
       if (foundNote) {
         setNote(foundNote);
-        
-        // Charger les images pour l'affichage
-        const imagesForDisplay = await loadImagesForDisplay(foundNote.images);
-        setDisplayImages(imagesForDisplay);
       } else {
         setNote(null);
-        setDisplayImages([]);
       }
     } catch (error) {
       console.error('Erreur lors du chargement de la note:', error);
@@ -223,108 +216,52 @@ export default function NoteDetailScreen() {
     const files = target.files;
     
     if (files && files.length > 0) {
-      console.log('📸 Images sélectionnées depuis détail note:', files.length);
+      const currentImages = note?.images || [];
       
-      // Vérifier la taille totale
-      const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
-      const totalSizeMB = totalSize / 1024 / 1024;
-      
-      if (totalSizeMB > 50) { // Limite à 50MB total
-        console.warn('⚠️ Taille totale trop importante:', totalSizeMB.toFixed(2), 'MB');
-        Alert.alert(
-          'Images trop volumineuses',
-          `La taille totale des images (${totalSizeMB.toFixed(1)}MB) dépasse la limite de 50MB. Veuillez sélectionner moins d'images.`,
-          [{ text: 'OK' }]
-        );
+      if (currentImages.length + files.length > 10) {
+        Alert.alert('Limite atteinte', 'Maximum 10 images par note.');
         target.value = '';
         return;
       }
       
       try {
-        // CORRECTION : Traiter les images une par une avec compression
         const processedImages: string[] = [];
         
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           
           if (!file || !file.type.startsWith('image/')) {
-            console.warn(`⚠️ Fichier ${i} ignoré (pas une image):`, file?.type);
             continue;
           }
           
           try {
-            console.log(`📸 Traitement image ${i + 1}/${files.length}:`, file.name);
-            const compressedImage = await processImage(file);
+            const compressedImage = await compressImageFromFile(file, {
+              maxWidth: 1280,
+              maxHeight: 1280,
+              quality: 0.75
+            });
             
             if (compressedImage && validateImageBase64(compressedImage)) {
               processedImages.push(compressedImage);
-              console.log(`✅ Image ${i + 1} traitée et validée avec succès`);
-            } else {
-              console.error(`❌ Image ${i + 1} invalide après traitement`);
-            }
-            
-            // Pause pour éviter de bloquer l'UI
-            if (i < files.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 100));
             }
           } catch (error) {
-            console.error(`❌ Erreur traitement image ${i + 1}:`, error);
+            console.warn(`Erreur traitement image ${i}:`, error);
           }
         }
         
-        // CORRECTION MAJEURE : Ajouter les nouvelles images aux existantes
         if (note && processedImages.length > 0) {
-          const currentImages = note.images || [];
-          const newTotalImages = currentImages.length + processedImages.length;
-          
-          console.log('📋 Images actuelles:', currentImages.length);
-          console.log('➕ Ajout de', processedImages.length, 'nouvelles images...');
-          console.log('📊 Total après ajout:', newTotalImages);
-          
-          // Limite le nombre total d'images pour éviter les problèmes de performance
-          if (newTotalImages > 20) {
-            console.warn('⚠️ Limite d\'images atteinte (20 max)');
-            Alert.alert(
-              'Limite d\'images atteinte',
-              'Vous ne pouvez pas ajouter plus de 20 images par note pour des raisons de performance.',
-              [{ text: 'OK' }]
-            );
-            target.value = '';
-            return;
+          const allImages = [...(note.images || []), ...processedImages];
+          const updatedNote = await updateNote(note.id, { images: allImages });
+          if (updatedNote) {
+            setNote(updatedNote);
           }
-          
-          try {
-            // CORRECTION MAJEURE : Fusionner correctement les images existantes et nouvelles
-            const allImages = [...currentImages, ...processedImages];
-            console.log('🔄 Fusion des images - Total final:', allImages.length);
-            
-            const updatedNote = await updateNote(note.id, {
-              images: allImages,
-            });
-          
-            if (updatedNote) {
-              console.log('✅ Note mise à jour avec succès depuis détail, total images:', updatedNote.images?.length || 0);
-              setNote(updatedNote);
-            } else {
-              console.error('❌ Erreur: updateNote a retourné null');
-              Alert.alert('Erreur', 'Impossible d\'ajouter les images. Veuillez réessayer.');
-            }
-          } catch (updateError) {
-            console.error('❌ Erreur lors de la mise à jour avec images:', updateError);
-            Alert.alert('Erreur', 'Impossible d\'ajouter les images. Problème de stockage.');
-          }
-        } else if (processedImages.length === 0) {
-          console.warn('⚠️ Aucune image valide à ajouter');
-          Alert.alert('Attention', 'Aucune image valide n\'a pu être traitée.');
         }
         
       } catch (error) {
-        console.error('❌ Erreur générale lors du traitement des images depuis détail:', error);
-        Alert.alert('Erreur', 'Erreur lors du traitement des images.');
+        console.error('Erreur traitement images:', error);
       }
     }
     
-    // Réinitialiser l'input
     target.value = '';
   };
 
