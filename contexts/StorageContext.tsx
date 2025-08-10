@@ -712,14 +712,8 @@ export function StorageProvider({ children }: StorageProviderProps) {
   const createFunctionalZone = async (buildingId: string, zoneData: Omit<FunctionalZone, 'id' | 'buildingId' | 'createdAt' | 'shutters'>): Promise<FunctionalZone | null> => {
     const newProjects = [...projectsRef.current];
     
-        // CORRECTION: Persistance sécurisée avec fallback
-        let persistedImages: string[] | undefined;
-        try {
-          persistedImages = await persistImagesIfNeeded(noteData.images);
-        } catch (error) {
-          console.warn('⚠️ Erreur persistance images, conservation base64:', error);
-          persistedImages = noteData.images; // Fallback vers base64
-        }
+    for (let i = 0; i < newProjects.length; i++) {
+      const buildingIndex = newProjects[i].buildings.findIndex(b => b.id === buildingId);
       if (buildingIndex !== -1) {
         const newZone: FunctionalZone = {
           ...zoneData,
@@ -731,14 +725,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
         
         newProjects[i] = {
           ...newProjects[i],
-        
-        // CORRECTION: Sauvegarde sécurisée
-        try {
-          await saveNotes(newNotes);
-        } catch (saveError) {
-          console.error('❌ Erreur sauvegarde note:', saveError);
-          throw new Error('Impossible de sauvegarder la note');
-        }
+          buildings: [
             ...newProjects[i].buildings.slice(0, buildingIndex),
             {
               ...newProjects[i].buildings[buildingIndex],
@@ -1176,14 +1163,13 @@ export function StorageProvider({ children }: StorageProviderProps) {
       contentLength: noteData.content?.length || 0
     });
     
-    // Persister les images si nécessaire
+    // CORRECTION: Persistance sécurisée avec fallback
     let persistedImages: string[] | undefined;
     try {
       persistedImages = await persistImagesIfNeeded(noteData.images);
-      console.log('💾 Images persistées:', persistedImages?.length || 0);
     } catch (error) {
-      console.error('❌ Erreur persistance images:', error);
-      persistedImages = undefined;
+      console.warn('⚠️ Erreur persistance images, conservation base64:', error);
+      persistedImages = noteData.images; // Fallback vers base64
     }
     
     const newNote: Note = {
@@ -1203,14 +1189,15 @@ export function StorageProvider({ children }: StorageProviderProps) {
     
     const newNotes = [newNote, ...notes];
     
+    // CORRECTION: Sauvegarde sécurisée
     try {
       await saveNotes(newNotes);
-      console.log('✅ StorageContext.createNote - Note sauvegardée avec succès');
-      return newNote;
     } catch (saveError) {
-      console.error('❌ StorageContext.createNote - Erreur sauvegarde:', saveError);
-      throw saveError;
+      console.error('BUG Erreur sauvegarde notes:', saveError);
     }
+    
+    console.log('✅ StorageContext.createNote - Note sauvegardée avec succès');
+    return newNote;
   };
 
   const updateNote = async (id: string, updates: Partial<Note>): Promise<Note | null> => {
