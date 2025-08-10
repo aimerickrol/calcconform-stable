@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, ScrollView, TextInput, Animated, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, ScrollView, TextInput, Animated, Image, Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Plus, FileText, Trash2, CreditCard as Edit3, Calendar, X, Star, SquareCheck as CheckSquare, Square, Filter, Dessert as SortDesc, Clock, Image as ImageIcon } from 'lucide-react-native';
 import { Settings } from 'lucide-react-native';
@@ -161,9 +161,7 @@ function NoteItem({ item, index, onPress, onEdit, onDelete, onToggleFavorite, is
       {item.description && (
         <View style={styles.descriptionRow}>
           <View style={styles.descriptionContainer}>
-            <Text style={styles.noteDescription} numberOfLines={1} ellipsizeMode="tail">
-              Description : {item.description}
-            </Text>
+            <Text style={styles.noteDescription} numberOfLines={1} ellipsizeMode="tail">Description : {item.description}</Text>
           </View>
         </View>
       )}
@@ -172,16 +170,12 @@ function NoteItem({ item, index, onPress, onEdit, onDelete, onToggleFavorite, is
         <View style={styles.badgesRow}>
           {item.location && (
             <View style={styles.locationBadge}>
-              <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">
-                <Text>Lieu : </Text>{item.location}
-              </Text>
+              <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">Lieu : {item.location}</Text>
             </View>
           )}
           {item.tags && (
             <View style={styles.tagsBadge}>
-              <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">
-                <Text>Mots-clés : </Text>{item.tags}
-              </Text>
+              <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">Mots-clés : {item.tags}</Text>
             </View>
           )}
         </View>
@@ -189,9 +183,7 @@ function NoteItem({ item, index, onPress, onEdit, onDelete, onToggleFavorite, is
 
       {item.content && (
         <View style={styles.contentPreviewContainer}>
-          <Text style={styles.notePreview} numberOfLines={2}>
-            <Text>Description : </Text>{item.description}
-          </Text>
+          <Text style={styles.notePreview} numberOfLines={2}>Description : {item.description}</Text>
         </View>
       )}
 

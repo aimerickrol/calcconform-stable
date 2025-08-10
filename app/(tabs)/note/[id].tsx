@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { CreditCard as Edit3, Trash2, Calendar, X, Check, Camera, Settings } from 'lucide-react-native';
 import { Header } from '@/components/Header';
