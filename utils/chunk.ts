@@ -79,7 +79,7 @@ export function splitByBytesLegacy(str: string, maxBytes: number): string[] {
  */
 export function splitStringByBytes(str: string, maxBytes: number): string[] {
   try {
-    if (typeof TextEncoder !== 'undefined') {
+    if (typeof TextEncoder !== 'undefined' && typeof window !== 'undefined') {
       return splitByBytes(str, maxBytes);
     } else {
       return splitByBytesLegacy(str, maxBytes);

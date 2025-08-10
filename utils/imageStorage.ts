@@ -18,6 +18,7 @@ export async function persistImagesIfNeeded(images?: string[]): Promise<string[]
 
   // Sur web, retourner les images inchangées
   if (Platform.OS === 'web') {
+    console.log('🌐 Web: conservation des images base64');
     return images;
   }
 
@@ -33,6 +34,7 @@ export async function persistImagesIfNeeded(images?: string[]): Promise<string[]
     }
   } catch (error) {
     console.error('❌ Erreur création dossier images:', error);
+    return images; // Fallback: garder les images base64
   }
 
   const persistedImages: string[] = [];
@@ -58,30 +60,37 @@ export async function persistImagesIfNeeded(images?: string[]): Promise<string[]
         const base64Data = image.split(',')[1];
         if (!base64Data) {
           console.warn(`⚠️ Image ${i} invalide (pas de données base64), ignorée`);
+          persistedImages.push(image); // Garder l'image base64 originale
           continue;
         }
 
-        // Écrire le fichier
-        await FileSystem.writeAsStringAsync(filePath, base64Data, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        try {
+          // Écrire le fichier
+          await FileSystem.writeAsStringAsync(filePath, base64Data, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
 
-        const fileUri = `file://${filePath}`;
-        persistedImages.push(fileUri);
-        console.log(`✅ Image ${i} persistée: ${fileName}`);
+          const fileUri = `file://${filePath}`;
+          persistedImages.push(fileUri);
+          console.log(`✅ Image ${i} persistée: ${fileName}`);
+        } catch (writeError) {
+          console.warn(`⚠️ Erreur écriture image ${i}, conservation base64:`, writeError);
+          persistedImages.push(image); // Fallback: garder l'image base64
+        }
         
       } else {
-        console.warn(`⚠️ Image ${i} format inconnu, ignorée:`, image.substring(0, 50));
+        console.warn(`⚠️ Image ${i} format inconnu, conservation:`, image.substring(0, 50));
+        persistedImages.push(image); // Garder l'image telle quelle
       }
       
     } catch (error) {
-      console.error(`❌ Erreur persistance image ${i}:`, error);
-      // Continuer sans cette image pour ne pas bloquer la note
+      console.error(`❌ Erreur persistance image ${i}, conservation base64:`, error);
+      persistedImages.push(image); // Fallback: garder l'image base64
     }
   }
 
   console.log(`✅ Persistance terminée: ${persistedImages.length}/${images.length} images sauvegardées`);
-  return persistedImages.length > 0 ? persistedImages : undefined;
+  return persistedImages;
 }
 
 /**

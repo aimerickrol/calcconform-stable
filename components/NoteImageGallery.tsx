@@ -48,21 +48,27 @@ function OptimizedImageItem({
 
   // Charger l'image pour l'affichage si c'est un file://
   useEffect(() => {
-    const loadForDisplay = async () => {
-      if (imageBase64.startsWith('file://')) {
-        try {
-          const loaded = await loadImageForDisplay(imageBase64);
-          setDisplayUri(loaded);
-        } catch (error) {
-          console.error('❌ Erreur chargement image pour affichage:', error);
-          setImageError(true);
+    if (Platform.OS !== 'web') {
+      const loadForDisplay = async () => {
+        if (imageBase64.startsWith('file://')) {
+          try {
+            const loaded = await loadImageForDisplay(imageBase64);
+            setDisplayUri(loaded);
+          } catch (error) {
+            console.error('❌ Erreur chargement image pour affichage:', error);
+            setImageError(true);
+          }
+        } else {
+          setDisplayUri(imageBase64);
         }
-      } else {
-        setDisplayUri(imageBase64);
-      }
-    };
+      };
+      
+      loadForDisplay();
+    } else {
+      // Sur web, utiliser directement l'URI
+      setDisplayUri(imageBase64);
+    }
     
-    loadForDisplay();
   }, [imageBase64]);
 
   // Vérifier si l'image est valide (base64 ou file://)

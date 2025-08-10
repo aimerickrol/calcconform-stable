@@ -1164,7 +1164,14 @@ export function StorageProvider({ children }: StorageProviderProps) {
     });
     
     // Persister les images si nécessaire
-    const persistedImages = await persistImagesIfNeeded(noteData.images);
+    let persistedImages: string[] | undefined;
+    try {
+      persistedImages = await persistImagesIfNeeded(noteData.images);
+      console.log('💾 Images persistées:', persistedImages?.length || 0);
+    } catch (error) {
+      console.error('❌ Erreur persistance images:', error);
+      persistedImages = undefined;
+    }
     
     const newNote: Note = {
       ...noteData,
@@ -1212,15 +1219,26 @@ export function StorageProvider({ children }: StorageProviderProps) {
     // Persister les nouvelles images si nécessaire
     let finalImages = updates.images;
     if (updates.images) {
-      finalImages = await persistImagesIfNeeded(updates.images);
+      try {
+        finalImages = await persistImagesIfNeeded(updates.images);
+        console.log('💾 Images mises à jour persistées:', finalImages?.length || 0);
+      } catch (error) {
+        console.error('❌ Erreur persistance images mise à jour:', error);
+        finalImages = undefined;
+      }
       
       // Supprimer les anciennes images qui ne sont plus utilisées
       if (currentNote.images) {
-        const oldImages = currentNote.images.filter(img => 
-          !finalImages?.includes(img)
-        );
-        if (oldImages.length > 0) {
-          await removeImages(oldImages);
+        try {
+          const oldImages = currentNote.images.filter(img => 
+            !finalImages?.includes(img)
+          );
+          if (oldImages.length > 0) {
+            await removeImages(oldImages);
+            console.log('🗑️ Anciennes images supprimées:', oldImages.length);
+          }
+        } catch (error) {
+          console.error('❌ Erreur suppression anciennes images:', error);
         }
       }
     }
@@ -1295,7 +1313,12 @@ export function StorageProvider({ children }: StorageProviderProps) {
       
       // Supprimer les images
       if (allImagesToRemove.length > 0) {
-        await removeImages(allImagesToRemove);
+        try {
+          await removeImages(allImagesToRemove);
+          console.log('🗑️ Images supprimées:', allImagesToRemove.length);
+        } catch (error) {
+          console.error('❌ Erreur suppression images batch:', error);
+        }
       }
       
       // Supprimer les notes
