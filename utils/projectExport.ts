@@ -56,7 +56,7 @@ export async function exportProject(project: Project, relatedNotes: Note[] = [])
         images: note.images || []
       })),
       metadata: {
-        appVersion: '2.1.0',
+        appVersion: '2.1.1',
         platform: Platform.OS,
         exportedBy: 'Siemens CalcConform'
       }

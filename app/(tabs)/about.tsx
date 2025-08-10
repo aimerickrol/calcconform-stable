@@ -18,7 +18,7 @@ export default function AboutScreen() {
   const { showModal } = useModal();
   const { showInstallButton, handleInstallClick, isInstalled, isIOSDevice } = useInstallPrompt();
 
-  const appVersion = "2.1.0";
+  const appVersion = "2.1.1";
 
   const handleVersionPress = () => {
     showModal(<VersionModal appVersion={appVersion} />);

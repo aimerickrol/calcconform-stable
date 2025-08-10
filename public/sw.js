@@ -1,7 +1,7 @@
 // Service Worker générique pour Siemens CalcConform PWA
 // Met en cache automatiquement tous les fichiers de build
 
-const CACHE_VERSION = 'v2.1.0';
+const CACHE_VERSION = 'v2.1.1';
 const STATIC_CACHE = `siemens-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `siemens-runtime-${CACHE_VERSION}`;
 

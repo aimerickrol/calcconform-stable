@@ -1,9 +1,9 @@
 // Service Worker pour Siemens CalcConform PWA
 // Version corrigée pour fonctionner sur tous les navigateurs
 
-const CACHE_NAME = 'siemens-calcconform-v2.0.0';
-const STATIC_CACHE_NAME = 'siemens-static-v2.0.0';
-const RUNTIME_CACHE_NAME = 'siemens-runtime-v2.0.0';
+const CACHE_NAME = 'siemens-calcconform-v2.1.1';
+const STATIC_CACHE_NAME = 'siemens-static-v2.1.1';
+const RUNTIME_CACHE_NAME = 'siemens-runtime-v2.1.1';
 
 // Ressources statiques essentielles à mettre en cache
 const STATIC_ASSETS = [
