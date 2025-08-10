@@ -391,7 +391,7 @@ export default function NoteDetailScreen() {
         </View>
 
         <NoteImageGallery
-          images={displayImages}
+          images={note?.images || []}
           onRemoveImage={handleRemoveImage}
           onRemoveMultipleImages={handleRemoveMultipleImages}
           editable={true}
