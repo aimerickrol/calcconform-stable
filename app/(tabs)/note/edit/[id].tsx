@@ -94,12 +94,9 @@ export default function EditNoteScreen() {
 
 
   const validateForm = () => {
-    // Validation minimale pour éviter les erreurs
-    const newErrors: { title?: string } = {};
-    
-    // Le titre peut être vide, il sera généré automatiquement
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    // Aucune validation requise - les notes peuvent être modifiées librement
+    setErrors({});
+    return true;
   };
 
   const handleSave = async () => {

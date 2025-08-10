@@ -75,16 +75,9 @@ export default function CreateNoteScreen() {
   };
 
   const validateForm = () => {
-    // CORRECTION: Validation minimale pour éviter les erreurs
-    const newErrors: { content?: string } = {};
-    
-    // Vérifier que le contenu n'est pas vide si aucune image
-    if (!content.trim() && images.length === 0) {
-      newErrors.content = 'Veuillez ajouter du contenu ou des images à votre note';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    // Aucune validation requise - les notes peuvent être créées vides
+    setErrors({});
+    return true;
   };
 
   const handleCreate = async () => {
